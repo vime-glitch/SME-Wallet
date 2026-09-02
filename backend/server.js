@@ -24,10 +24,13 @@ app.get("/test-db", async (req, res) => {
 });
 
 const authRoutes = require("./routes/auth");
+const walletRoutes = require("./routes/wallet");
+
 app.use(express.json());
 app.use("/api/auth", authRoutes);
+app.use("/api/wallet", walletRoutes);
 
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${5000}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
 

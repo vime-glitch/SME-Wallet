@@ -96,6 +96,11 @@ router.post("/register", async (req, res) => {
             [userId, passwordHash]
         );
 
+        await client.query(
+            "INSERT INTO wallet (user_id, balance, status, created_date) VALUES ($1, 0.00, 'active', NOW())",
+            [userId]
+        );
+
         await client.query("COMMIT");
 
         return res.status(201).json({
