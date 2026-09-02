@@ -246,4 +246,68 @@ router.post("/deposit", authenticateToken, async (req, res) => {
     }
 });
 
+router.get("/transactions", authenticateToken, async (req, res) => {
+    try {
+        const walletResult = await pool.query(
+            `SELECT
+                wallet_id,
+                user_id,
+                status
+            FROM wallet
+            WHERE user_id = $1
+              AND status = 'active'
+            LIMIT 1;`,
+            [req.user.user_id]
+        );
+
+        if (walletResult.rows.length === 0) {
+            return res.status(404).json({
+                message: "Wallet not found for this user."
+            });
+        }
+
+        const wallet = walletResult.rows[0];
+
+        const result = await pool.query(
+            `SELECT
+                t.transaction_id,
+                t.amount,
+                t.transaction_datetime,
+                t.description,
+                t.reference_number,
+                tt.type_name AS transaction_type,
+                ts.status_name AS transaction_status,
+                t.sender_wallet_id,
+                t.receiver_wallet_id
+            FROM transactions t
+            INNER JOIN transaction_type tt ON tt.transaction_type_id = t.transaction_type_id
+            INNER JOIN transaction_status ts ON ts.transaction_status_id = t.transaction_status_id
+            WHERE t.sender_wallet_id = $1
+               OR t.receiver_wallet_id = $1
+               OR t.initiated_by_user_id = $2
+            ORDER BY t.transaction_datetime DESC;`,
+            [wallet.wallet_id, req.user.user_id]
+        );
+
+        return res.status(200).json({
+            transactions: result.rows.map((transaction) => ({
+                transaction_id: transaction.transaction_id,
+                amount: Number(transaction.amount),
+                transaction_datetime: transaction.transaction_datetime,
+                description: transaction.description,
+                reference_number: transaction.reference_number,
+                transaction_type: transaction.transaction_type,
+                transaction_status: transaction.transaction_status,
+                sender_wallet_id: transaction.sender_wallet_id,
+                receiver_wallet_id: transaction.receiver_wallet_id
+            }))
+        });
+    } catch (error) {
+        console.error("Get wallet transactions error:", error);
+        return res.status(500).json({
+            message: "Database error while fetching transaction history."
+        });
+    }
+});
+
 module.exports = router;
