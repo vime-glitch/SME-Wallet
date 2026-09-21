@@ -28,7 +28,11 @@ const validateDepositAmount = (value) => {
     };
 };
 
-const findOrCreateTransactionType = async (client, typeName) => {
+const findOrCreateTransactionType = async (
+    client,
+    typeName,
+    description = "Funds deposited into a user wallet."
+) => {
     const result = await client.query(
         "SELECT transaction_type_id, type_name FROM transaction_type WHERE LOWER(type_name) = LOWER($1) LIMIT 1;",
         [typeName]
@@ -43,7 +47,7 @@ const findOrCreateTransactionType = async (client, typeName) => {
          VALUES ($1, $2)
          ON CONFLICT (type_name) DO NOTHING
          RETURNING transaction_type_id, type_name;`,
-        [typeName, "Funds deposited into a user wallet."]
+        [typeName, description]
     );
 
     if (insertResult.rows.length > 0) {
@@ -243,6 +247,197 @@ router.post("/deposit", authenticateToken, async (req, res) => {
         });
     } finally {
         client.release();
+    }
+});
+
+router.post("/withdraw", authenticateToken, async (req, res) => {
+    const { amount, account_id: accountId } = req.body;
+
+    if (amount === undefined || amount === null || (typeof amount === "string" && amount.trim() === "")) {
+        return res.status(400).json({
+            message: "Withdrawal amount is required."
+        });
+    }
+
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({
+            message: "Withdrawal amount must be a positive number."
+        });
+    }
+
+    if (accountId === undefined || accountId === null || accountId === "") {
+        return res.status(400).json({
+            message: "Bank account is required."
+        });
+    }
+
+    if (
+        (typeof accountId !== "number" && typeof accountId !== "string") ||
+        (typeof accountId === "string" && accountId.trim() === "") ||
+        !Number.isInteger(Number(accountId)) ||
+        Number(accountId) <= 0
+    ) {
+        return res.status(400).json({
+            message: "A valid bank account is required."
+        });
+    }
+
+    const cleanAccountId = Number(accountId);
+    let client;
+
+    try {
+        client = await pool.connect();
+        await client.query("BEGIN");
+
+        const walletResult = await client.query(
+            `SELECT
+                wallet_id,
+                user_id,
+                balance,
+                status
+            FROM wallet
+            WHERE user_id = $1
+            LIMIT 1
+            FOR UPDATE;`,
+            [req.user.user_id]
+        );
+
+        if (walletResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({
+                message: "Wallet not found for this user."
+            });
+        }
+
+        const wallet = walletResult.rows[0];
+
+        if (wallet.status !== "active") {
+            await client.query("ROLLBACK");
+            return res.status(403).json({
+                message: "Wallet is not active. Withdrawal cannot be processed."
+            });
+        }
+
+        const accountResult = await client.query(
+            `SELECT
+                uad.user_account_id,
+                uad.account_number,
+                b.bank_name
+            FROM user_account_details uad
+            INNER JOIN bank b ON b.bank_id = uad.bank_id
+            WHERE uad.user_account_id = $1
+              AND uad.user_id = $2
+            LIMIT 1;`,
+            [cleanAccountId, req.user.user_id]
+        );
+
+        if (accountResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+                message: "Bank account not found for this user."
+            });
+        }
+
+        const destinationAccount = accountResult.rows[0];
+        const walletBalance = Number(wallet.balance);
+
+        if (!Number.isFinite(walletBalance) || walletBalance < amount) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+                message: "Insufficient wallet balance."
+            });
+        }
+
+        const withdrawalType = await findOrCreateTransactionType(
+            client,
+            "withdrawal",
+            "Funds withdrawn from a user wallet to a registered bank account."
+        );
+        const completedStatus = await findOrCreateTransactionStatus(client, "completed");
+
+        const updatedWalletResult = await client.query(
+            `UPDATE wallet
+             SET balance = balance - $1
+             WHERE wallet_id = $2
+               AND balance >= $1
+             RETURNING wallet_id, user_id, balance, status;`,
+            [amount, wallet.wallet_id]
+        );
+
+        if (updatedWalletResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+                message: "Insufficient wallet balance."
+            });
+        }
+
+        const updatedWallet = updatedWalletResult.rows[0];
+        const referenceNumber = `WTH-${Date.now()}-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+
+        const transactionResult = await client.query(
+            `INSERT INTO transactions (
+                sender_wallet_id,
+                receiver_wallet_id,
+                user_account_id,
+                initiated_by_user_id,
+                transaction_type_id,
+                transaction_status_id,
+                amount,
+                transaction_datetime,
+                description,
+                reference_number
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9)
+            RETURNING reference_number, amount;`,
+            [
+                updatedWallet.wallet_id,
+                null,
+                destinationAccount.user_account_id,
+                req.user.user_id,
+                withdrawalType.transaction_type_id,
+                completedStatus.transaction_status_id,
+                amount,
+                "Withdraw funds from wallet to registered bank account.",
+                referenceNumber
+            ]
+        );
+
+        await client.query("COMMIT");
+
+        const transaction = transactionResult.rows[0];
+        const maskedAccountNumber = destinationAccount.account_number.length > 4
+            ? `****${destinationAccount.account_number.slice(-4)}`
+            : "****";
+
+        return res.status(200).json({
+            message: "Withdrawal successful.",
+            transaction_reference: transaction.reference_number,
+            withdrawn_amount: Number(transaction.amount),
+            updated_wallet_balance: Number(updatedWallet.balance),
+            transaction_status: completedStatus.status_name,
+            destination_account: {
+                account_id: destinationAccount.user_account_id,
+                bank_name: destinationAccount.bank_name,
+                account_number: maskedAccountNumber
+            },
+            wallet: {
+                wallet_id: updatedWallet.wallet_id,
+                user_id: updatedWallet.user_id,
+                status: updatedWallet.status,
+                balance: Number(updatedWallet.balance)
+            }
+        });
+    } catch (error) {
+        if (client) {
+            await client.query("ROLLBACK").catch(() => {});
+        }
+        console.error("Withdrawal error:", error);
+        return res.status(500).json({
+            message: "Database error while processing withdrawal."
+        });
+    } finally {
+        if (client) {
+            client.release();
+        }
     }
 });
 
