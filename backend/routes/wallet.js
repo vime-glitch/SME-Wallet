@@ -92,6 +92,239 @@ const findOrCreateTransactionStatus = async (client, statusName) => {
     return fallback.rows[0];
 };
 
+router.post("/transfer", authenticateToken, async (req, res) => {
+    const { recipient, amount } = req.body;
+
+    if (amount === undefined || amount === null) {
+        return res.status(400).json({
+            message: "Transfer amount is required."
+        });
+    }
+
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({
+            message: "Transfer amount must be a positive number."
+        });
+    }
+
+    if (
+        (typeof recipient !== "number" && typeof recipient !== "string") ||
+        (typeof recipient === "string" && recipient.trim() === "") ||
+        !Number.isInteger(Number(recipient)) ||
+        Number(recipient) <= 0
+    ) {
+        return res.status(400).json({
+            message: "A valid SME identifier is required."
+        });
+    }
+
+    const smeId = Number(recipient);
+    let client;
+
+    try {
+        client = await pool.connect();
+        await client.query("BEGIN");
+
+        const senderRoleResult = await client.query(
+            `SELECT 1
+             FROM customer c
+             INNER JOIN user_role ur ON ur.user_id = c.user_id
+             INNER JOIN role r ON r.role_id = ur.role_id
+             WHERE c.user_id = $1
+               AND LOWER(r.role_name) = 'customer'
+             LIMIT 1;`,
+            [req.user.user_id]
+        );
+
+        if (senderRoleResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(403).json({
+                message: "Only users with the Customer role can initiate transfers."
+            });
+        }
+
+        const recipientResult = await client.query(
+            `SELECT
+                s.sme_id,
+                s.user_id,
+                s.business_name
+             FROM sme s
+             INNER JOIN user_role ur ON ur.user_id = s.user_id
+             INNER JOIN role r ON r.role_id = ur.role_id
+             WHERE s.sme_id = $1
+               AND s.is_active = TRUE
+               AND LOWER(r.role_name) = 'sme'
+             LIMIT 1;`,
+            [smeId]
+        );
+
+        if (recipientResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({
+                message: "SME recipient not found."
+            });
+        }
+
+        const recipientDetails = recipientResult.rows[0];
+
+        if (recipientDetails.user_id === req.user.user_id) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+                message: "You cannot transfer money to yourself."
+            });
+        }
+
+        const walletResult = await client.query(
+            `SELECT
+                wallet_id,
+                user_id,
+                balance,
+                status
+             FROM wallet
+             WHERE user_id IN ($1, $2)
+             ORDER BY wallet_id
+             FOR UPDATE;`,
+            [req.user.user_id, recipientDetails.user_id]
+        );
+
+        const senderWallet = walletResult.rows.find((wallet) => wallet.user_id === req.user.user_id);
+        const recipientWallet = walletResult.rows.find((wallet) => wallet.user_id === recipientDetails.user_id);
+
+        if (!senderWallet) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({
+                message: "Wallet not found for this user."
+            });
+        }
+
+        if (senderWallet.status !== "active") {
+            await client.query("ROLLBACK");
+            return res.status(403).json({
+                message: "Wallet is not active. Transfer cannot be processed."
+            });
+        }
+
+        if (!recipientWallet) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({
+                message: "Recipient wallet not found."
+            });
+        }
+
+        if (recipientWallet.status !== "active") {
+            await client.query("ROLLBACK");
+            return res.status(403).json({
+                message: "Recipient wallet is not active."
+            });
+        }
+
+        const senderBalance = Number(senderWallet.balance);
+
+        if (!Number.isFinite(senderBalance) || senderBalance < amount) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+                message: "Insufficient wallet balance."
+            });
+        }
+
+        const transferType = await findOrCreateTransactionType(
+            client,
+            "wallet transfer",
+            "Funds transferred from one wallet to another."
+        );
+        const completedStatus = await findOrCreateTransactionStatus(client, "completed");
+
+        const updatedWalletResult = await client.query(
+            `UPDATE wallet
+             SET balance = balance - $1
+             WHERE wallet_id = $2
+               AND balance >= $1
+             RETURNING wallet_id, user_id, balance, status;`,
+            [amount, senderWallet.wallet_id]
+        );
+
+        if (updatedWalletResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+                message: "Insufficient wallet balance."
+            });
+        }
+
+        const updatedSenderWallet = updatedWalletResult.rows[0];
+
+        const updatedRecipientWalletResult = await client.query(
+            `UPDATE wallet
+             SET balance = balance + $1
+             WHERE wallet_id = $2
+             RETURNING wallet_id, user_id, balance, status;`,
+            [amount, recipientWallet.wallet_id]
+        );
+
+        if (updatedRecipientWalletResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(500).json({
+                message: "Transfer could not be completed."
+            });
+        }
+
+        const referenceNumber = `TRF-${Date.now()}-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+        const transactionResult = await client.query(
+            `INSERT INTO transactions (
+                sender_wallet_id,
+                receiver_wallet_id,
+                user_account_id,
+                initiated_by_user_id,
+                transaction_type_id,
+                transaction_status_id,
+                amount,
+                transaction_datetime,
+                description,
+                reference_number
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9)
+            RETURNING reference_number, amount, transaction_datetime, description;`,
+            [
+                updatedSenderWallet.wallet_id,
+                updatedRecipientWalletResult.rows[0].wallet_id,
+                null,
+                req.user.user_id,
+                transferType.transaction_type_id,
+                completedStatus.transaction_status_id,
+                amount,
+                `Wallet transfer to ${recipientDetails.business_name}.`,
+                referenceNumber
+            ]
+        );
+
+        await client.query("COMMIT");
+
+        const transaction = transactionResult.rows[0];
+
+        return res.status(200).json({
+            message: "Transfer successful.",
+            transaction_reference: transaction.reference_number,
+            transferred_amount: Number(transaction.amount),
+            updated_sender_wallet_balance: Number(updatedSenderWallet.balance),
+            recipient: {
+                sme_id: recipientDetails.sme_id,
+                business_name: recipientDetails.business_name
+            },
+            transaction_status: completedStatus.status_name
+        });
+    } catch (error) {
+        if (client) {
+            await client.query("ROLLBACK").catch(() => {});
+        }
+        console.error("Transfer error:", error);
+        return res.status(500).json({
+            message: "Database error while processing transfer."
+        });
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+});
+
 router.get("/", authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(
