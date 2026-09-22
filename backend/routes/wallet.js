@@ -365,6 +365,37 @@ router.get("/", authenticateToken, async (req, res) => {
     }
 });
 
+router.get("/accounts", authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT
+                uad.user_account_id,
+                uad.account_number,
+                b.bank_name
+             FROM user_account_details uad
+             INNER JOIN bank b ON b.bank_id = uad.bank_id
+             WHERE uad.user_id = $1
+             ORDER BY uad.user_account_id;`,
+            [req.user.user_id]
+        );
+
+        const accounts = result.rows.map((account) => ({
+            account_id: account.user_account_id,
+            bank_name: account.bank_name,
+            account_number: account.account_number.length > 4
+                ? `****${account.account_number.slice(-4)}`
+                : "****"
+        }));
+
+        return res.status(200).json({ accounts });
+    } catch (error) {
+        console.error("Get bank accounts error:", error);
+        return res.status(500).json({
+            message: "Database error while retrieving bank accounts."
+        });
+    }
+});
+
 router.post("/deposit", authenticateToken, async (req, res) => {
     const { amount } = req.body;
     const validatedAmount = validateDepositAmount(amount);

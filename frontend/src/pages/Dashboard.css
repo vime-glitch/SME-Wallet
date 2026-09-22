@@ -147,6 +147,12 @@
   font-size: 1rem;
 }
 
+.dashboard-success {
+  color: #5b214f !important;
+  font-size: 0.875rem !important;
+  font-weight: 700;
+}
+
 .balance-card {
   position: relative;
   display: grid;
@@ -313,6 +319,165 @@
   color: #806f7c;
   font-size: 1rem;
   font-weight: 600;
+}
+
+.modal-backdrop {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(45 27 46 / 42%);
+}
+
+.deposit-modal {
+  width: min(100%, 28rem);
+  padding: 1.75rem;
+  border: 1px solid rgb(122 62 114 / 12%);
+  border-radius: 1.5rem;
+  background: #fffdfb;
+  box-shadow: 0 1.5rem 3rem rgb(45 27 46 / 25%);
+}
+
+.deposit-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-eyebrow {
+  margin: 0 0 0.4rem;
+  color: #7a3e72;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.deposit-modal h2 {
+  margin: 0;
+  color: #2d1b2e;
+  font-size: 1.5rem;
+  letter-spacing: -0.04em;
+}
+
+.modal-close {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #5b214f;
+  background: #f4dde7;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:disabled,
+.modal-cancel:disabled,
+.modal-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.deposit-instruction {
+  margin: 1rem 0 1.5rem;
+  color: #806f7c;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.deposit-form {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.deposit-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.deposit-field label {
+  color: #2d1b2e;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.amount-input {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 3.25rem;
+  padding: 0 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.875rem;
+  background: #f4dde7;
+}
+
+.amount-input:focus-within {
+  border-color: #d98baf;
+  background: #fffdfb;
+  box-shadow: 0 0 0 3px rgb(217 139 175 / 20%);
+}
+
+.amount-input > span {
+  color: #5b214f;
+  font-weight: 800;
+}
+
+.amount-input input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: #2d1b2e;
+  background: transparent;
+  font: inherit;
+}
+
+.deposit-error {
+  margin: 0;
+  color: #9b3f54;
+  font-size: 0.8125rem;
+}
+
+.deposit-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.modal-cancel,
+.modal-submit {
+  min-height: 2.9rem;
+  padding: 0.7rem 1.2rem;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.modal-cancel {
+  border: 1px solid rgb(122 62 114 / 20%);
+  color: #5b214f;
+  background: #fffdfb;
+}
+
+.modal-submit {
+  border: 0;
+  color: #2d1b2e;
+  background: #d98baf;
+  box-shadow: 0 0.5rem 1rem rgb(217 139 175 / 20%);
+}
+
+.modal-cancel:hover:not(:disabled),
+.modal-submit:hover:not(:disabled),
+.modal-close:hover:not(:disabled) {
+  filter: brightness(0.97);
 }
 
 @media (max-width: 820px) {

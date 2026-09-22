@@ -276,7 +276,6 @@ CREATE TABLE user_authentication(
     auth_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id integer NOT NULL UNIQUE,
     password_hash varchar(255) NOT NULL,
-    is_verified boolean NOT NULL DEFAULT false, 
     is_active boolean NOT NULL DEFAULT true, 
     created_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT fk_user_authentication_user

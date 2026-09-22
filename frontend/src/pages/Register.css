@@ -150,6 +150,21 @@
   color: #806f7c;
 }
 
+.register-section-help,
+.register-help {
+  color: #806f7c;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.register-section-help {
+  margin: -0.5rem 0 1rem;
+}
+
+.register-help {
+  margin: 0;
+}
+
 .register-form {
   display: grid;
   gap: 1.5rem;
@@ -193,7 +208,8 @@
   font-weight: 700;
 }
 
-.register-field input {
+.register-field input,
+.register-field select {
   width: 100%;
   min-height: 3rem;
   padding: 0.75rem 0.875rem;
@@ -206,19 +222,30 @@
   transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
 }
 
+.register-field select {
+  cursor: pointer;
+}
+
+.register-field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .register-field input::placeholder {
   color: #806f7c;
   opacity: 0.75;
 }
 
-.register-field input:focus {
+.register-field input:focus,
+.register-field select:focus {
   border-color: #d98baf;
   outline: none;
   background: #fffdfb;
   box-shadow: 0 0 0 3px rgb(217 139 175 / 20%);
 }
 
-.register-field input[aria-invalid="true"] {
+.register-field input[aria-invalid="true"],
+.register-field select[aria-invalid="true"] {
   border-color: #a64d62;
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import './Register.css'
 
@@ -16,11 +16,17 @@ const initialForm = {
   business_type: '',
   business_address: '',
   date_registered: '',
+  bank_id: '',
+  account_number: '',
+  confirmAccountNumber: '',
 }
 
 function Register() {
   const navigate = useNavigate()
   const [form, setForm] = useState(initialForm)
+  const [banks, setBanks] = useState([])
+  const [isLoadingBanks, setIsLoadingBanks] = useState(true)
+  const [bankLoadError, setBankLoadError] = useState('')
   const [errors, setErrors] = useState({})
   const [serverError, setServerError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -28,6 +34,27 @@ function Register() {
 
   const showBusinessFields =
     form.account_type === 'sme' || form.account_type === 'both'
+
+  useEffect(() => {
+    const fetchBanks = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/banks')
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error('Unable to load banks.')
+        }
+
+        setBanks(Array.isArray(data?.banks) ? data.banks : [])
+      } catch {
+        setBankLoadError('Unable to load banks. You can continue without adding a bank account.')
+      } finally {
+        setIsLoadingBanks(false)
+      }
+    }
+
+    fetchBanks()
+  }, [])
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -92,6 +119,28 @@ function Register() {
       })
     }
 
+    const hasBankDetails =
+      Boolean(form.bank_id) ||
+      Boolean(form.account_number.trim()) ||
+      Boolean(form.confirmAccountNumber.trim())
+
+    if (hasBankDetails) {
+      if (!form.bank_id) {
+        validationErrors.bank_id = 'Please select a bank.'
+      }
+
+      if (!form.account_number.trim()) {
+        validationErrors.account_number = 'Account number is required.'
+      }
+
+      if (
+        !form.confirmAccountNumber.trim() ||
+        form.account_number.trim() !== form.confirmAccountNumber.trim()
+      ) {
+        validationErrors.confirmAccountNumber = 'Account numbers do not match.'
+      }
+    }
+
     setErrors(validationErrors)
 
     if (Object.keys(validationErrors).length > 0) {
@@ -115,6 +164,13 @@ function Register() {
         business_type: form.business_type.trim(),
         business_address: form.business_address.trim(),
         date_registered: form.date_registered,
+      })
+    }
+
+    if (hasBankDetails && !validationErrors.bank_id && !validationErrors.account_number && !validationErrors.confirmAccountNumber) {
+      Object.assign(requestBody, {
+        bank_id: Number(form.bank_id),
+        account_number: form.account_number.trim(),
       })
     }
 
@@ -393,6 +449,73 @@ function Register() {
                 </div>
               </fieldset>
             )}
+
+            <fieldset className="register-section">
+              <legend>Bank Account Details</legend>
+              <p className="register-section-help">
+                Optional — you can leave this section blank and add a bank account later.
+              </p>
+              <div className="register-grid register-grid-two">
+                <div className="register-field">
+                  <label htmlFor="bank_id">Bank</label>
+                  <select
+                    id="bank_id"
+                    name="bank_id"
+                    value={form.bank_id}
+                    onChange={handleChange}
+                    disabled={isLoadingBanks}
+                    required={Boolean(form.bank_id || form.account_number || form.confirmAccountNumber)}
+                    {...errorProps('bank_id')}
+                  >
+                    <option value="">Select your bank</option>
+                    {banks.map((bank) => (
+                      <option key={bank.bank_id} value={bank.bank_id}>
+                        {bank.bank_name}
+                      </option>
+                    ))}
+                  </select>
+                  {isLoadingBanks && <p className="register-help">Loading banks...</p>}
+                  {bankLoadError && <p className="register-error">{bankLoadError}</p>}
+                  {errors.bank_id && <p id="bank_id-error" className="register-error">{errors.bank_id}</p>}
+                </div>
+
+                <div className="register-field">
+                  <label htmlFor="account_number">Account number</label>
+                  <input
+                    id="account_number"
+                    name="account_number"
+                    type="text"
+                    placeholder="Enter your account number"
+                    value={form.account_number}
+                    onChange={handleChange}
+                    autoComplete="off"
+                    required={Boolean(form.bank_id || form.account_number || form.confirmAccountNumber)}
+                    {...errorProps('account_number')}
+                  />
+                  {errors.account_number && <p id="account_number-error" className="register-error">{errors.account_number}</p>}
+                </div>
+
+                <div className="register-field">
+                  <label htmlFor="confirmAccountNumber">Confirm account number</label>
+                  <input
+                    id="confirmAccountNumber"
+                    name="confirmAccountNumber"
+                    type="text"
+                    placeholder="Re-enter your account number"
+                    value={form.confirmAccountNumber}
+                    onChange={handleChange}
+                    autoComplete="off"
+                    required={Boolean(form.bank_id || form.account_number || form.confirmAccountNumber)}
+                    {...errorProps('confirmAccountNumber')}
+                  />
+                  {errors.confirmAccountNumber && (
+                    <p id="confirmAccountNumber-error" className="register-error">
+                      {errors.confirmAccountNumber}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </fieldset>
 
             {serverError && <p className="register-error">{serverError}</p>}
             {successMessage && (

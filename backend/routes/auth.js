@@ -53,7 +53,9 @@ router.post("/register", async (req, res) => {
         business_name,
         business_type,
         business_address,
-        date_registered
+        date_registered,
+        bank_id: bankId,
+        account_number: accountNumber
     } = req.body;
 
     const requiredFields = ["fname", "lname", "ph_number", "email", "location", "postal_address", "password", "account_type"];
@@ -130,10 +132,65 @@ router.post("/register", async (req, res) => {
         });
     }
 
+    const hasBankId = bankId !== undefined && bankId !== null;
+    const hasAccountNumber = accountNumber !== undefined && accountNumber !== null;
+
+    if (hasBankId !== hasAccountNumber) {
+        return res.status(400).json({
+            message: "bank_id and account_number must be provided together."
+        });
+    }
+
+    let cleanBankId = null;
+    let trimmedAccountNumber = "";
+
+    if (hasBankId && hasAccountNumber) {
+        if (
+            (typeof bankId !== "number" && typeof bankId !== "string") ||
+            (typeof bankId === "string" && bankId.trim() === "") ||
+            !Number.isInteger(Number(bankId)) ||
+            Number(bankId) <= 0
+        ) {
+            return res.status(400).json({
+                message: "bank_id must be a positive integer."
+            });
+        }
+
+        if (typeof accountNumber !== "string") {
+            return res.status(400).json({
+                message: "account_number must be a non-empty string."
+            });
+        }
+
+        trimmedAccountNumber = accountNumber.trim();
+
+        if (!trimmedAccountNumber) {
+            return res.status(400).json({
+                message: "account_number must be a non-empty string."
+            });
+        }
+
+        cleanBankId = Number(bankId);
+    }
+
     const client = await pool.connect();
 
     try {
         await client.query("BEGIN");
+
+        if (cleanBankId !== null) {
+            const bankResult = await client.query(
+                "SELECT bank_id FROM bank WHERE bank_id = $1 LIMIT 1",
+                [cleanBankId]
+            );
+
+            if (bankResult.rows.length === 0) {
+                await client.query("ROLLBACK");
+                return res.status(400).json({
+                    message: "Selected bank does not exist."
+                });
+            }
+        }
 
         const emailExistsResult = await client.query(
             "SELECT user_id FROM user_contact_info WHERE email = $1",
@@ -156,13 +213,32 @@ router.post("/register", async (req, res) => {
 
         const userId = userResult.rows[0].user_id;
 
+        if (cleanBankId !== null) {
+            await client.query(
+                `INSERT INTO user_account_details (
+                    user_id,
+                    bank_id,
+                    account_number,
+                    account_name,
+                    account_type
+                ) VALUES ($1, $2, $3, $4, $5)`,
+                [
+                    userId,
+                    cleanBankId,
+                    trimmedAccountNumber,
+                    `${trimmedFirstName} ${trimmedLastName}`,
+                    "savings"
+                ]
+            );
+        }
+
         await client.query(
             "INSERT INTO user_contact_info (user_id, ph_number, email, location, postal_address) VALUES ($1, $2, $3, $4, $5)",
             [userId, trimmedPhone, trimmedEmail, trimmedLocation, trimmedPostalAddress]
         );
 
         await client.query(
-            "INSERT INTO user_authentication (user_id, password_hash, is_verified, is_active, created_at) VALUES ($1, $2, FALSE, TRUE, NOW())",
+            "INSERT INTO user_authentication (user_id, password_hash, is_active, created_at) VALUES ($1, $2, TRUE, NOW())",
             [userId, passwordHash]
         );
 
@@ -307,7 +383,6 @@ router.post("/login", async (req, res) => {
                 u.lname,
                 c.email,
                 a.password_hash,
-                a.is_verified,
                 a.is_active
             FROM users u
             INNER JOIN user_contact_info c ON c.user_id = u.user_id
@@ -328,12 +403,6 @@ router.post("/login", async (req, res) => {
         if (!user.is_active) {
             return res.status(403).json({
                 message: "Your account is inactive. Contact support."
-            });
-        }
-
-        if (!user.is_verified) {
-            return res.status(403).json({
-                message: "Your account is not verified yet."
             });
         }
 
@@ -383,7 +452,6 @@ router.get("/me", authenticateToken, async (req, res) => {
                 c.email,
                 c.location,
                 c.postal_address,
-                a.is_verified,
                 a.is_active
             FROM users u
             INNER JOIN user_contact_info c ON c.user_id = u.user_id
@@ -410,7 +478,6 @@ router.get("/me", authenticateToken, async (req, res) => {
                 email: user.email,
                 location: user.location,
                 postal_address: user.postal_address,
-                is_verified: user.is_verified,
                 is_active: user.is_active
             }
         });

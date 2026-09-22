@@ -12,6 +12,11 @@ function Dashboard() {
   const [balance, setBalance] = useState(null)
   const [isLoading, setIsLoading] = useState(Boolean(token))
   const [error, setError] = useState(token ? '' : 'Unable to load balance.')
+  const [isDepositOpen, setIsDepositOpen] = useState(false)
+  const [depositAmount, setDepositAmount] = useState('')
+  const [depositError, setDepositError] = useState('')
+  const [depositSuccess, setDepositSuccess] = useState('')
+  const [isDepositing, setIsDepositing] = useState(false)
 
   const getStoredUser = () => {
     if (typeof window === 'undefined') {
@@ -79,6 +84,86 @@ function Dashboard() {
     }
   }, [token])
 
+  const openDeposit = () => {
+    setDepositAmount('')
+    setDepositError('')
+    setDepositSuccess('')
+    setIsDepositOpen(true)
+  }
+
+  const closeDeposit = () => {
+    if (isDepositing) {
+      return
+    }
+
+    setIsDepositOpen(false)
+    setDepositAmount('')
+    setDepositError('')
+  }
+
+  const handleDepositSubmit = async (event) => {
+    event.preventDefault()
+
+    const trimmedAmount = depositAmount.trim()
+    const numericAmount = Number(trimmedAmount)
+
+    if (!trimmedAmount) {
+      setDepositError('Amount is required.')
+      return
+    }
+
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setDepositError('Enter a positive amount.')
+      return
+    }
+
+    if (!token) {
+      setDepositError('Your session has expired. Please log in again.')
+      return
+    }
+
+    setIsDepositing(true)
+    setDepositError('')
+    setDepositSuccess('')
+
+    try {
+      const response = await fetch('http://localhost:5000/api/wallet/deposit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: numericAmount,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setDepositError(data?.message || 'Unable to process deposit. Please try again.')
+        return
+      }
+
+      const updatedBalance = Number(data?.wallet?.balance)
+
+      if (!Number.isFinite(updatedBalance)) {
+        setDepositError('Unable to process deposit. Please try again.')
+        return
+      }
+
+      setBalance(updatedBalance)
+      setIsDepositOpen(false)
+      setDepositAmount('')
+      setDepositError('')
+      setDepositSuccess('Deposit successful.')
+    } catch {
+      setDepositError('Unable to connect to the server. Please try again.')
+    } finally {
+      setIsDepositing(false)
+    }
+  }
+
   const user = getStoredUser()
   const firstName = user?.fname?.trim()
   const lastName = user?.lname?.trim()
@@ -128,6 +213,11 @@ function Dashboard() {
           <section className="welcome-block" aria-labelledby="dashboard-greeting">
             <h1 id="dashboard-greeting">{greetingLabel}</h1>
             <p>Here&apos;s your wallet overview.</p>
+            {depositSuccess && (
+              <p className="dashboard-success" role="status">
+                {depositSuccess}
+              </p>
+            )}
           </section>
 
           <section className="balance-card" aria-label="Wallet balance">
@@ -154,7 +244,7 @@ function Dashboard() {
             </div>
 
             <div className="action-grid">
-              <button type="button" className="action-card deposit-card">
+              <button type="button" className="action-card deposit-card" onClick={openDeposit}>
                 <span className="action-title">Deposit</span>
                 <span className="action-text">Add money to your wallet</span>
               </button>
@@ -182,6 +272,83 @@ function Dashboard() {
           </section>
         </div>
       </div>
+
+      {isDepositOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="deposit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="deposit-heading"
+          >
+            <div className="deposit-modal-header">
+              <div>
+                <p className="modal-eyebrow">Wallet action</p>
+                <h2 id="deposit-heading">Deposit Funds</h2>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeDeposit}
+                disabled={isDepositing}
+                aria-label="Close deposit dialog"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="deposit-instruction">
+              Enter the amount you would like to add to your wallet.
+            </p>
+
+            <form className="deposit-form" onSubmit={handleDepositSubmit} noValidate>
+              <div className="deposit-field">
+                <label htmlFor="deposit-amount">Amount</label>
+                <div className="amount-input">
+                  <span aria-hidden="true">K</span>
+                  <input
+                    id="deposit-amount"
+                    name="depositAmount"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={depositAmount}
+                    onChange={(event) => {
+                      setDepositAmount(event.target.value)
+                      setDepositError('')
+                    }}
+                    aria-invalid={Boolean(depositError)}
+                    aria-describedby={depositError ? 'deposit-error' : undefined}
+                    disabled={isDepositing}
+                    autoFocus
+                  />
+                </div>
+                {depositError && (
+                  <p id="deposit-error" className="deposit-error" role="alert">
+                    {depositError}
+                  </p>
+                )}
+              </div>
+
+              <div className="deposit-modal-actions">
+                <button
+                  type="button"
+                  className="modal-cancel"
+                  onClick={closeDeposit}
+                  disabled={isDepositing}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="modal-submit" disabled={isDepositing}>
+                  {isDepositing ? 'Processing...' : 'Deposit'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   )
 }
