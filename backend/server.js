@@ -1,4 +1,5 @@
 const express = require("express");
+const cors = require("cors");
 const pool = require("./config/database");
 const app = express();
 
@@ -26,6 +27,11 @@ app.get("/test-db", async (req, res) => {
 const authRoutes = require("./routes/auth");
 const walletRoutes = require("./routes/wallet");
 
+app.use(cors({
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/wallet", walletRoutes);
@@ -33,4 +39,3 @@ app.use("/api/wallet", walletRoutes);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
-

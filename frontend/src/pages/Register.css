@@ -1,0 +1,367 @@
+.register-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: #5b214f;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.register-shell {
+  width: min(100%, 76rem);
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.72fr) minmax(34rem, 1.28fr);
+  position: relative;
+  isolation: isolate;
+}
+
+.register-brand-panel {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  min-height: 48rem;
+  padding: 3rem;
+  overflow: hidden;
+  border-radius: 2.5rem 0 0 2.5rem;
+  color: #fffdfb;
+  background: #5b214f;
+}
+
+.register-brand-panel::before,
+.register-brand-panel::after {
+  content: "";
+  position: absolute;
+  border: 1px solid rgb(244 221 231 / 20%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.register-brand-panel::before {
+  width: 28rem;
+  height: 28rem;
+  top: -8rem;
+  left: -8rem;
+  box-shadow:
+    0 0 0 2rem rgb(244 221 231 / 5%),
+    0 0 0 4rem rgb(244 221 231 / 4%),
+    0 0 0 6rem rgb(244 221 231 / 3%);
+}
+
+.register-brand-panel::after {
+  width: 20rem;
+  height: 20rem;
+  right: -9rem;
+  bottom: -6rem;
+  border-color: rgb(217 139 175 / 30%);
+  box-shadow: 0 0 0 2rem rgb(217 139 175 / 8%);
+}
+
+.register-contour {
+  position: absolute;
+  z-index: -1;
+  width: 22rem;
+  height: 10rem;
+  border: 1px solid rgb(217 139 175 / 27%);
+  border-radius: 50%;
+  transform: rotate(-28deg);
+  pointer-events: none;
+}
+
+.register-contour-one {
+  top: 14rem;
+  right: -7rem;
+}
+
+.register-contour-two {
+  top: 16rem;
+  right: -5rem;
+  transform: rotate(-28deg) scale(0.82);
+}
+
+.register-contour-three {
+  top: 18rem;
+  right: -3rem;
+  transform: rotate(-28deg) scale(0.64);
+}
+
+.register-brand-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 15rem;
+}
+
+.register-wordmark,
+.register-brand {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.register-wordmark {
+  color: #f4dde7;
+}
+
+.register-tagline {
+  margin: 1rem 0 0;
+  color: rgb(255 253 251 / 72%);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.register-card {
+  align-self: center;
+  width: 100%;
+  max-width: 52rem;
+  margin-left: -2rem;
+  padding: 3.5rem;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 2;
+  border-radius: 2.5rem;
+  background: #fffdfb;
+  box-shadow: 0 1.5rem 3.5rem rgb(45 27 46 / 22%);
+}
+
+.register-header {
+  margin-bottom: 2rem;
+}
+
+.register-brand {
+  margin-bottom: 1.25rem;
+  color: #7a3e72;
+}
+
+.register-header h1 {
+  margin: 0;
+  color: #2d1b2e;
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.register-header p:last-child {
+  margin: 0.8rem 0 0;
+  color: #806f7c;
+}
+
+.register-form {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.register-section {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.register-section legend {
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0;
+  color: #5b214f;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.register-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.register-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.register-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.register-field label,
+.register-label {
+  color: #2d1b2e;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.register-field input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.75rem 0.875rem;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 0.875rem;
+  color: #2d1b2e;
+  background: #f4dde7;
+  font: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.register-field input::placeholder {
+  color: #806f7c;
+  opacity: 0.75;
+}
+
+.register-field input:focus {
+  border-color: #d98baf;
+  outline: none;
+  background: #fffdfb;
+  box-shadow: 0 0 0 3px rgb(217 139 175 / 20%);
+}
+
+.register-field input[aria-invalid="true"] {
+  border-color: #a64d62;
+}
+
+.register-error {
+  margin: 0;
+  color: #9b3f54;
+  font-size: 0.75rem;
+}
+
+.account-type-field {
+  margin-bottom: 1rem;
+}
+
+.account-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.account-option {
+  display: flex;
+  flex: 1 1 8rem;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  box-sizing: border-box;
+  border: 1px solid #f4dde7;
+  border-radius: 0.75rem;
+  color: #5b214f;
+  background: #fffdfb;
+  cursor: pointer;
+}
+
+.account-option:has(input:checked) {
+  border-color: #d98baf;
+  background: #f4dde7;
+}
+
+.account-option input {
+  accent-color: #7a3e72;
+}
+
+.account-option span {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.register-submit {
+  width: 100%;
+  min-height: 3.25rem;
+  margin-top: 0.25rem;
+  padding: 0.8rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  color: #2d1b2e;
+  background: #d98baf;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 0.5rem 1rem rgb(217 139 175 / 20%);
+  transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.register-submit:hover {
+  background: #ca789e;
+  box-shadow: 0 0.75rem 1.25rem rgb(91 33 79 / 18%);
+  transform: translateY(-2px);
+}
+
+.register-submit:focus-visible,
+.account-option:has(input:focus-visible),
+.login-prompt a:focus-visible {
+  outline: 3px solid rgb(122 62 114 / 38%);
+  outline-offset: 3px;
+}
+
+.login-prompt {
+  margin: 1.75rem 0 0;
+  color: #806f7c;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.login-prompt a {
+  color: #7a3e72;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.login-prompt a:hover {
+  color: #5b214f;
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .register-page {
+    padding: 1.5rem;
+  }
+
+  .register-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .register-brand-panel {
+    min-height: 14rem;
+    align-items: flex-start;
+    padding: 2rem;
+    border-radius: 2rem 2rem 0 0;
+  }
+
+  .register-card {
+    max-width: none;
+    margin: -2rem 0 0;
+    padding: 2.75rem;
+    border-radius: 2rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .register-page {
+    min-height: 100svh;
+    padding: 0;
+  }
+
+  .register-brand-panel {
+    min-height: 12rem;
+    padding: 1.5rem;
+    border-radius: 0;
+  }
+
+  .register-card {
+    margin-top: -1.5rem;
+    padding: 2rem 1.25rem 2.25rem;
+    border-radius: 1.75rem 1.75rem 0 0;
+  }
+
+  .register-grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .account-options {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
