@@ -414,6 +414,16 @@ router.post("/login", async (req, res) => {
             });
         }
 
+        const rolesResult = await pool.query(
+            `SELECT r.role_name
+             FROM user_role ur
+             INNER JOIN role r ON r.role_id = ur.role_id
+             WHERE ur.user_id = $1
+             ORDER BY r.role_name;`,
+            [user.user_id]
+        );
+        const roles = rolesResult.rows.map((row) => row.role_name);
+
         if (!process.env.JWT_SECRET) {
             console.error("JWT_SECRET is missing from environment variables.");
             return res.status(500).json({
@@ -430,7 +440,8 @@ router.post("/login", async (req, res) => {
                 user_id: user.user_id,
                 fname: user.fname,
                 lname: user.lname,
-                email: user.email
+                email: user.email,
+                roles
             }
         });
     } catch (error) {

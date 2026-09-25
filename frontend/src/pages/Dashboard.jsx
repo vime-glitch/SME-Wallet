@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './Dashboard.css'
 
 function Dashboard() {
+  const navigate = useNavigate()
   const [token] = useState(() => {
     if (typeof window === 'undefined') {
       return ''
@@ -25,6 +27,13 @@ function Dashboard() {
   const [withdrawError, setWithdrawError] = useState('')
   const [withdrawSuccess, setWithdrawSuccess] = useState('')
   const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [isTransferOpen, setIsTransferOpen] = useState(false)
+  const [transferRecipient, setTransferRecipient] = useState('')
+  const [transferAmount, setTransferAmount] = useState('')
+  const [transferError, setTransferError] = useState('')
+  const [transferSuccess, setTransferSuccess] = useState('')
+  const [isTransferring, setIsTransferring] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const getStoredUser = () => {
     if (typeof window === 'undefined') {
@@ -37,6 +46,17 @@ function Dashboard() {
     } catch {
       return null
     }
+  }
+
+  const handleLogout = () => {
+    if (isLoggingOut) {
+      return
+    }
+
+    setIsLoggingOut(true)
+    window.localStorage.removeItem('token')
+    window.localStorage.removeItem('user')
+    navigate('/login', { replace: true })
   }
 
   useEffect(() => {
@@ -338,6 +358,136 @@ function Dashboard() {
     }
   }
 
+  const openTransfer = () => {
+    setTransferRecipient('')
+    setTransferAmount('')
+    setTransferError('')
+    setTransferSuccess('')
+    setIsTransferring(false)
+    setIsTransferOpen(true)
+    if (!token) {
+      setTransferError('Your session has expired. Please log in again.')
+    }
+  }
+
+  const closeTransfer = () => {
+    if (isTransferring) {
+      return
+    }
+
+    setIsTransferOpen(false)
+    setTransferRecipient('')
+    setTransferAmount('')
+    setTransferError('')
+  }
+
+  const handleTransferSubmit = async (event) => {
+    event.preventDefault()
+
+    const trimmedRecipient = transferRecipient.trim()
+    const trimmedAmount = transferAmount.trim()
+    const numericRecipient = Number(trimmedRecipient)
+    const numericAmount = Number(trimmedAmount)
+
+    if (!trimmedRecipient) {
+      setTransferError('Recipient SME ID is required.')
+      return
+    }
+
+    if (!/^\d+$/.test(trimmedRecipient) || !Number.isSafeInteger(numericRecipient) || numericRecipient <= 0) {
+      setTransferError('Enter a valid positive integer SME ID.')
+      return
+    }
+
+    if (!trimmedAmount) {
+      setTransferError('Amount is required.')
+      return
+    }
+
+    if (!/^\d+(\.\d+)?$/.test(trimmedAmount) || !Number.isFinite(numericAmount)) {
+      setTransferError('Enter a valid numeric amount.')
+      return
+    }
+
+    if (numericAmount <= 0) {
+      setTransferError('Enter an amount greater than zero.')
+      return
+    }
+
+    if (!Number.isFinite(balance) || numericAmount > balance) {
+      setTransferError('The transfer amount cannot exceed your wallet balance.')
+      return
+    }
+
+    if (!token) {
+      setTransferError('Your session has expired. Please log in again.')
+      return
+    }
+
+    setIsTransferring(true)
+    setTransferError('')
+    setTransferSuccess('')
+
+    try {
+      const response = await fetch('http://localhost:5000/api/wallet/transfer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          recipient: Number(trimmedRecipient),
+          amount: Number(trimmedAmount),
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setTransferError(data?.message || 'Unable to process transfer. Please try again.')
+        return
+      }
+
+      const transferReference =
+        data?.transaction_reference ||
+        data?.reference ||
+        data?.transfer_reference ||
+        data?.transaction?.reference
+      const referenceMessage = transferReference ? ` Reference: ${transferReference}` : ''
+      const transferredAmount = Number(data?.transferred_amount)
+      const successfulAmount = Number.isFinite(transferredAmount) ? transferredAmount : numericAmount
+      setTransferSuccess(
+        `Transfer of K ${successfulAmount.toFixed(2)} successful.${referenceMessage}`,
+      )
+
+      const updatedBalance = Number(
+        data?.wallet?.balance ?? data?.updated_sender_wallet_balance,
+      )
+      if (Number.isFinite(updatedBalance)) {
+        setBalance(updatedBalance)
+      }
+
+      setIsTransferOpen(false)
+      setTransferRecipient('')
+      setTransferAmount('')
+
+      const walletResponse = await fetch('http://localhost:5000/api/wallet', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
+      })
+      const walletData = await walletResponse.json()
+      if (walletResponse.ok && Number.isFinite(Number(walletData?.wallet?.balance))) {
+        setBalance(Number(walletData.wallet.balance))
+      }
+    } catch {
+      setTransferError('Unable to connect to the server. Please try again.')
+    } finally {
+      setIsTransferring(false)
+    }
+  }
+
   const user = getStoredUser()
   const firstName = user?.fname?.trim()
   const lastName = user?.lname?.trim()
@@ -346,6 +496,9 @@ function Dashboard() {
   const fullName = firstName && lastName ? `${firstName} ${lastName}` : firstName || 'Frontend Customer'
   const initials = `${firstName?.[0] || 'F'}${lastName?.[0] || 'C'}`.toUpperCase()
   const formattedBalance = Number.isFinite(balance) ? `K ${Number(balance).toFixed(2)}` : 'K 0.00'
+  const hasCustomerRole =
+    Array.isArray(user?.roles) &&
+    user.roles.some((role) => typeof role === 'string' && role.toLowerCase() === 'customer')
 
   return (
     <main className="dashboard-page">
@@ -367,6 +520,14 @@ function Dashboard() {
               Settings
             </button>
           </nav>
+          <button
+            type="button"
+            className="nav-item logout-button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+          >
+            {isLoggingOut ? 'Logging Out...' : 'Log Out'}
+          </button>
         </aside>
 
         <div className="dashboard-main">
@@ -395,6 +556,11 @@ function Dashboard() {
             {withdrawSuccess && (
               <p className="dashboard-success" role="status">
                 {withdrawSuccess}
+              </p>
+            )}
+            {transferSuccess && (
+              <p className="dashboard-success" role="status">
+                {transferSuccess}
               </p>
             )}
           </section>
@@ -433,10 +599,12 @@ function Dashboard() {
                 <span className="action-text">Send money to your bank</span>
               </button>
 
-              <button type="button" className="action-card transfer-card">
-                <span className="action-title">Transfer</span>
-                <span className="action-text">Send money to an SME</span>
-              </button>
+              {hasCustomerRole && (
+                <button type="button" className="action-card transfer-card" onClick={openTransfer}>
+                  <span className="action-title">Transfer</span>
+                  <span className="action-text">Send money to an SME</span>
+                </button>
+              )}
             </div>
           </section>
 
@@ -637,6 +805,102 @@ function Dashboard() {
                     </section>
                   </div>
                 )}
+      {isTransferOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="deposit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transfer-heading"
+          >
+            <div className="deposit-modal-header">
+              <div>
+                <p className="modal-eyebrow">Wallet action</p>
+                <h2 id="transfer-heading">Transfer Funds</h2>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeTransfer}
+                disabled={isTransferring}
+                aria-label="Close transfer dialog"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="deposit-instruction">
+              Ask the recipient to provide their SME ID, then enter the amount you would like to
+              transfer.
+            </p>
+
+            <form className="deposit-form" onSubmit={handleTransferSubmit} noValidate>
+              <div className="deposit-field">
+                <label htmlFor="transfer-recipient">Recipient SME ID</label>
+                <input
+                  id="transfer-recipient"
+                  name="transferRecipient"
+                  className="modal-input"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Enter SME ID"
+                  value={transferRecipient}
+                  onChange={(event) => {
+                    setTransferRecipient(event.target.value)
+                    setTransferError('')
+                  }}
+                  aria-invalid={Boolean(transferError)}
+                  aria-describedby={transferError ? 'transfer-error' : undefined}
+                  disabled={isTransferring}
+                  autoFocus
+                />
+              </div>
+
+              <div className="deposit-field">
+                <label htmlFor="transfer-amount">Amount</label>
+                <div className="amount-input">
+                  <span aria-hidden="true">K</span>
+                  <input
+                    id="transfer-amount"
+                    name="transferAmount"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={transferAmount}
+                    onChange={(event) => {
+                      setTransferAmount(event.target.value)
+                      setTransferError('')
+                    }}
+                    aria-invalid={Boolean(transferError)}
+                    aria-describedby={transferError ? 'transfer-error' : undefined}
+                    disabled={isTransferring}
+                  />
+                </div>
+              </div>
+
+              {transferError && (
+                <p id="transfer-error" className="deposit-error" role="alert">
+                  {transferError}
+                </p>
+              )}
+
+              <div className="deposit-modal-actions">
+                <button
+                  type="button"
+                  className="modal-cancel"
+                  onClick={closeTransfer}
+                  disabled={isTransferring}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="modal-submit" disabled={isTransferring}>
+                  {isTransferring ? 'Processing...' : 'Transfer'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   )
 }

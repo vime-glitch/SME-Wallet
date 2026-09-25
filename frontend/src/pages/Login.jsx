@@ -55,6 +55,7 @@ function Login() {
           fname: data.user.fname,
           lname: data.user.lname,
           email: data.user.email,
+          roles: Array.isArray(data.user.roles) ? data.user.roles : [],
         }),
       )
       navigate('/dashboard')

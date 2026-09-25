@@ -23,6 +23,8 @@
 }
 
 .dashboard-sidebar {
+  display: flex;
+  flex-direction: column;
   padding: 2.25rem 1.5rem 2rem;
   background: linear-gradient(180deg, #5b214f 0%, #4b163d 100%);
   color: #fffdfb;
@@ -68,6 +70,12 @@
   border-color: rgb(244 221 231 / 25%);
   background: rgb(244 221 231 / 10%);
   color: #fffdfb;
+}
+
+.logout-button {
+  margin-top: auto;
+  border-color: rgb(244 221 231 / 25%);
+  background: rgb(255 253 251 / 6%);
 }
 
 .dashboard-main {
@@ -437,6 +445,25 @@
   color: #2d1b2e;
   background: transparent;
   font: inherit;
+}
+
+.modal-input {
+  width: 100%;
+  min-height: 3.25rem;
+  box-sizing: border-box;
+  padding: 0 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.875rem;
+  outline: 0;
+  color: #2d1b2e;
+  background: #f4dde7;
+  font: inherit;
+}
+
+.modal-input:focus {
+  border-color: #d98baf;
+  background: #fffdfb;
+  box-shadow: 0 0 0 3px rgb(217 139 175 / 20%);
 }
 
 .account-select {
