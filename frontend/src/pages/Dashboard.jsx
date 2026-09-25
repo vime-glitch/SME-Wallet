@@ -12,8 +12,12 @@ function Dashboard() {
     return window.localStorage.getItem('token') || ''
   })
   const [balance, setBalance] = useState(null)
+  const [walletId, setWalletId] = useState(null)
   const [isLoading, setIsLoading] = useState(Boolean(token))
   const [error, setError] = useState(token ? '' : 'Unable to load balance.')
+  const [recentTransactions, setRecentTransactions] = useState([])
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(Boolean(token))
+  const [transactionsError, setTransactionsError] = useState('')
   const [isDepositOpen, setIsDepositOpen] = useState(false)
   const [depositAmount, setDepositAmount] = useState('')
   const [depositError, setDepositError] = useState('')
@@ -93,6 +97,7 @@ function Dashboard() {
         }
 
         setBalance(nextBalance)
+        setWalletId(Number(data?.wallet?.wallet_id))
       } catch (err) {
         if (err?.name === 'AbortError') {
           return
@@ -111,6 +116,67 @@ function Dashboard() {
       controller.abort()
     }
   }, [token])
+
+  useEffect(() => {
+    if (!token) {
+      return undefined
+    }
+
+    const controller = new AbortController()
+
+    const fetchRecentTransactions = async () => {
+      setIsLoadingTransactions(true)
+      setTransactionsError('')
+
+      try {
+        const response = await fetch('http://localhost:5000/api/wallet/transactions', {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        const data = await response.json()
+
+        if (response.status === 401) {
+          window.localStorage.removeItem('token')
+          window.localStorage.removeItem('user')
+          navigate('/login', { replace: true })
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error('Unable to load transaction history.')
+        }
+
+        const transactions = Array.isArray(data?.transactions) ? data.transactions : []
+        const latestTransactions = [...transactions]
+          .sort(
+            (first, second) =>
+              new Date(second.transaction_datetime).getTime() -
+              new Date(first.transaction_datetime).getTime(),
+          )
+          .slice(0, 5)
+
+        setRecentTransactions(latestTransactions)
+      } catch (requestError) {
+        if (requestError?.name === 'AbortError') {
+          return
+        }
+
+        setTransactionsError('Unable to load recent transactions.')
+      } finally {
+        setIsLoadingTransactions(false)
+      }
+    }
+
+    fetchRecentTransactions()
+
+    return () => {
+      controller.abort()
+    }
+  }, [navigate, token])
 
   useEffect(() => {
     if (!isWithdrawOpen) {
@@ -499,6 +565,30 @@ function Dashboard() {
   const hasCustomerRole =
     Array.isArray(user?.roles) &&
     user.roles.some((role) => typeof role === 'string' && role.toLowerCase() === 'customer')
+  const formatTransactionDate = (value) => {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString()
+  }
+  const getRecentTransactionPresentation = (transaction) => {
+    const type = String(transaction.transaction_type || '').toLowerCase()
+    const isTransfer = type.includes('transfer')
+    const isIncoming =
+      type.includes('deposit') ||
+      (isTransfer && walletId !== null && transaction.receiver_wallet_id === walletId)
+    const isOutgoing =
+      type.includes('withdraw') ||
+      (isTransfer && walletId !== null && transaction.sender_wallet_id === walletId)
+
+    return {
+      amountClass: isIncoming
+        ? 'recent-transaction-amount incoming'
+        : isOutgoing
+          ? 'recent-transaction-amount outgoing'
+          : 'recent-transaction-amount',
+      amountPrefix: isIncoming ? '+' : isOutgoing ? '-' : '',
+      directionLabel: isIncoming ? 'Money in' : isOutgoing ? 'Money out' : '',
+    }
+  }
 
   return (
     <main className="dashboard-page">
@@ -510,10 +600,10 @@ function Dashboard() {
             <button type="button" className="nav-item active">
               Dashboard
             </button>
-            <button type="button" className="nav-item">
+            <button type="button" className="nav-item" onClick={() => navigate('/wallet')}>
               My Wallet
             </button>
-            <button type="button" className="nav-item">
+            <button type="button" className="nav-item" onClick={() => navigate('/transactions')}>
               Transactions
             </button>
             <button type="button" className="nav-item">
@@ -611,11 +701,67 @@ function Dashboard() {
           <section className="transactions-panel" aria-labelledby="transactions-heading">
             <div className="section-heading-row">
               <h2 id="transactions-heading">Recent Transactions</h2>
+              <button
+                type="button"
+                className="view-transactions-button"
+                onClick={() => navigate('/transactions')}
+              >
+                View All Transactions
+              </button>
             </div>
 
-            <div className="empty-state">
-              <p>No transactions yet</p>
-            </div>
+            {isLoadingTransactions ? (
+              <div className="empty-state transactions-loading">
+                <p>Loading recent transactions...</p>
+              </div>
+            ) : transactionsError ? (
+              <div className="empty-state transactions-preview-error" role="alert">
+                <p>{transactionsError}</p>
+              </div>
+            ) : recentTransactions.length === 0 ? (
+              <div className="empty-state">
+                <p>
+                  Your transactions will appear here once you make a deposit, withdrawal, or
+                  transfer.
+                </p>
+              </div>
+            ) : (
+              <div className="recent-transaction-list" aria-label="Recent transactions">
+                {recentTransactions.map((transaction) => {
+                  const presentation = getRecentTransactionPresentation(transaction)
+
+                  return (
+                    <article
+                      className="recent-transaction-card"
+                      key={transaction.transaction_id}
+                    >
+                      <div className="recent-transaction-main">
+                        <div className="recent-transaction-heading">
+                          <h3>{transaction.transaction_type || 'Wallet transaction'}</h3>
+                          <span className="recent-transaction-status">
+                            {transaction.transaction_status || 'Status unavailable'}
+                          </span>
+                        </div>
+                        <p>{transaction.description || 'No description available.'}</p>
+                        <span className="recent-transaction-date">
+                          {formatTransactionDate(transaction.transaction_datetime)}
+                        </span>
+                      </div>
+                      <div className="recent-transaction-amount-wrap">
+                        <strong className={presentation.amountClass}>
+                          {presentation.amountPrefix}K{Number(transaction.amount).toFixed(2)}
+                        </strong>
+                        {presentation.directionLabel && (
+                          <span className="recent-transaction-direction">
+                            {presentation.directionLabel}
+                          </span>
+                        )}
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
           </section>
         </div>
       </div>

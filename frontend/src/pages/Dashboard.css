@@ -261,6 +261,24 @@
   font-weight: 800;
 }
 
+.view-transactions-button {
+  padding: 0;
+  border: 0;
+  color: #7a3e72;
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.view-transactions-button:hover,
+.view-transactions-button:focus-visible {
+  color: #5b214f;
+  text-decoration: underline;
+  outline: none;
+}
+
 .action-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -327,6 +345,100 @@
   color: #806f7c;
   font-size: 1rem;
   font-weight: 600;
+  text-align: center;
+}
+
+.recent-transaction-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.recent-transaction-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgb(122 62 114 / 10%);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #fffdfb 0%, #f9eef3 100%);
+  box-shadow: 0 0.6rem 1.2rem rgb(91 33 79 / 4%);
+}
+
+.recent-transaction-main {
+  min-width: 0;
+}
+
+.recent-transaction-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.recent-transaction-heading h3 {
+  margin: 0;
+  color: #2d1b2e;
+  font-size: 0.95rem;
+}
+
+.recent-transaction-status {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  color: #5b214f;
+  background: #f4dde7;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.recent-transaction-main p {
+  margin: 0.35rem 0 0;
+  overflow: hidden;
+  color: #806f7c;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-transaction-date {
+  display: block;
+  margin-top: 0.35rem;
+  color: #806f7c;
+  font-size: 0.7rem;
+}
+
+.recent-transaction-amount-wrap {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  text-align: right;
+}
+
+.recent-transaction-amount {
+  display: block;
+  color: #2d1b2e;
+  font-size: 1.05rem;
+  letter-spacing: -0.03em;
+}
+
+.recent-transaction-amount.incoming {
+  color: #47715e;
+}
+
+.recent-transaction-amount.outgoing {
+  color: #9b3f54;
+}
+
+.recent-transaction-direction {
+  display: block;
+  margin-top: 0.2rem;
+  color: #806f7c;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.transactions-preview-error p {
+  color: #9b3f54;
 }
 
 .modal-backdrop {
@@ -556,5 +668,9 @@
 
   .action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .recent-transaction-card {
+    align-items: flex-start;
   }
 }
