@@ -17,6 +17,14 @@ function Dashboard() {
   const [depositError, setDepositError] = useState('')
   const [depositSuccess, setDepositSuccess] = useState('')
   const [isDepositing, setIsDepositing] = useState(false)
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
+  const [withdrawAmount, setWithdrawAmount] = useState('')
+  const [withdrawAccountId, setWithdrawAccountId] = useState('')
+  const [withdrawAccounts, setWithdrawAccounts] = useState([])
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(false)
+  const [withdrawError, setWithdrawError] = useState('')
+  const [withdrawSuccess, setWithdrawSuccess] = useState('')
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
 
   const getStoredUser = () => {
     if (typeof window === 'undefined') {
@@ -83,6 +91,60 @@ function Dashboard() {
       controller.abort()
     }
   }, [token])
+
+  useEffect(() => {
+    if (!isWithdrawOpen) {
+      return undefined
+    }
+
+    if (!token) {
+      return undefined
+    }
+
+    const controller = new AbortController()
+
+    const fetchAccounts = async () => {
+      setIsLoadingAccounts(true)
+      setWithdrawError('')
+      setWithdrawAccounts([])
+      setWithdrawAccountId('')
+
+      try {
+        const response = await fetch('http://localhost:5000/api/wallet/accounts', {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        })
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data?.message || 'Unable to load bank accounts.')
+        }
+
+        const accounts = Array.isArray(data?.accounts) ? data.accounts : []
+        setWithdrawAccounts(accounts)
+        if (accounts.length > 0) {
+          setWithdrawAccountId(String(accounts[0].account_id))
+        }
+      } catch (err) {
+        if (err?.name === 'AbortError') {
+          return
+        }
+
+        setWithdrawError(err?.message || 'Unable to load bank accounts.')
+      } finally {
+        setIsLoadingAccounts(false)
+      }
+    }
+
+    fetchAccounts()
+
+    return () => {
+      controller.abort()
+    }
+  }, [isWithdrawOpen, token])
 
   const openDeposit = () => {
     setDepositAmount('')
@@ -164,6 +226,118 @@ function Dashboard() {
     }
   }
 
+  const openWithdraw = () => {
+    setWithdrawAmount('')
+    setWithdrawAccountId('')
+    setWithdrawAccounts([])
+    setWithdrawError('')
+    setWithdrawSuccess('')
+    setIsWithdrawOpen(true)
+    if (!token) {
+      setWithdrawError('Your session has expired. Please log in again.')
+    }
+  }
+
+  const closeWithdraw = () => {
+    if (isWithdrawing) {
+      return
+    }
+
+    setIsWithdrawOpen(false)
+    setWithdrawAmount('')
+    setWithdrawAccountId('')
+    setWithdrawError('')
+  }
+
+  const handleWithdrawSubmit = async (event) => {
+    event.preventDefault()
+
+    const trimmedAmount = withdrawAmount.trim()
+    const numericAmount = Number(trimmedAmount)
+
+    if (!trimmedAmount) {
+      setWithdrawError('Amount is required.')
+      return
+    }
+
+    if (!/^\d+(\.\d+)?$/.test(trimmedAmount) || !Number.isFinite(numericAmount)) {
+      setWithdrawError('Enter a valid numeric amount.')
+      return
+    }
+
+    if (numericAmount <= 0) {
+      setWithdrawError('Enter an amount greater than zero.')
+      return
+    }
+
+    if (!Number.isFinite(balance) || numericAmount > balance) {
+      setWithdrawError('The withdrawal amount cannot exceed your wallet balance.')
+      return
+    }
+
+    if (!withdrawAccountId || withdrawAccounts.length === 0) {
+      setWithdrawError('Please select a registered bank account.')
+      return
+    }
+
+    if (!token) {
+      setWithdrawError('Your session has expired. Please log in again.')
+      return
+    }
+
+    setIsWithdrawing(true)
+    setWithdrawError('')
+    setWithdrawSuccess('')
+
+    try {
+      const response = await fetch('http://localhost:5000/api/wallet/withdraw', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: Number(withdrawAmount),
+          account_id: Number(withdrawAccountId),
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setWithdrawError(data?.message || 'Unable to process withdrawal. Please try again.')
+        return
+      }
+
+      const updatedBalance = Number(data?.wallet?.balance)
+      if (Number.isFinite(updatedBalance)) {
+        setBalance(updatedBalance)
+      }
+
+      setWithdrawSuccess('Withdrawal successful.')
+      setIsWithdrawOpen(false)
+      setWithdrawAmount('')
+      setWithdrawAccountId('')
+      setWithdrawError('')
+      setWithdrawAccounts([])
+
+      const walletResponse = await fetch('http://localhost:5000/api/wallet', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
+      })
+      const walletData = await walletResponse.json()
+      if (walletResponse.ok && Number.isFinite(Number(walletData?.wallet?.balance))) {
+        setBalance(Number(walletData.wallet.balance))
+      }
+    } catch {
+      setWithdrawError('Unable to connect to the server. Please try again.')
+    } finally {
+      setIsWithdrawing(false)
+    }
+  }
+
   const user = getStoredUser()
   const firstName = user?.fname?.trim()
   const lastName = user?.lname?.trim()
@@ -218,6 +392,11 @@ function Dashboard() {
                 {depositSuccess}
               </p>
             )}
+            {withdrawSuccess && (
+              <p className="dashboard-success" role="status">
+                {withdrawSuccess}
+              </p>
+            )}
           </section>
 
           <section className="balance-card" aria-label="Wallet balance">
@@ -249,7 +428,7 @@ function Dashboard() {
                 <span className="action-text">Add money to your wallet</span>
               </button>
 
-              <button type="button" className="action-card withdraw-card">
+              <button type="button" className="action-card withdraw-card" onClick={openWithdraw}>
                 <span className="action-title">Withdraw</span>
                 <span className="action-text">Send money to your bank</span>
               </button>
@@ -349,6 +528,115 @@ function Dashboard() {
           </section>
         </div>
       )}
+                      {isWithdrawOpen && (
+                  <div className="modal-backdrop" role="presentation">
+                    <section
+                      className="deposit-modal"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="withdraw-heading"
+                    >
+                      <div className="deposit-modal-header">
+                        <div>
+                          <p className="modal-eyebrow">Wallet action</p>
+                          <h2 id="withdraw-heading">Withdraw Funds</h2>
+                        </div>
+                        <button
+                          type="button"
+                          className="modal-close"
+                          onClick={closeWithdraw}
+                          disabled={isWithdrawing}
+                          aria-label="Close withdrawal dialog"
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <p className="deposit-instruction">
+                        Choose a registered bank account and enter the amount you would like to withdraw.
+                      </p>
+
+                      <form className="deposit-form" onSubmit={handleWithdrawSubmit} noValidate>
+                        <div className="deposit-field">
+                          <label htmlFor="withdraw-amount">Amount</label>
+                          <div className="amount-input">
+                            <span aria-hidden="true">K</span>
+                            <input
+                              id="withdraw-amount"
+                              name="withdrawAmount"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={withdrawAmount}
+                              onChange={(event) => {
+                                setWithdrawAmount(event.target.value)
+                                setWithdrawError('')
+                              }}
+                              aria-invalid={Boolean(withdrawError)}
+                              aria-describedby={withdrawError ? 'withdraw-error' : undefined}
+                              disabled={isWithdrawing}
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+
+                        <div className="deposit-field">
+                          <label htmlFor="withdraw-account">Registered bank account</label>
+                          {isLoadingAccounts ? (
+                            <p className="deposit-instruction account-status">Loading bank accounts...</p>
+                          ) : withdrawAccounts.length === 0 ? (
+                            <p className="deposit-instruction account-status">
+                              No registered bank accounts found. Please register a bank account before
+                              withdrawing.
+                            </p>
+                          ) : (
+                            <select
+                              id="withdraw-account"
+                              name="withdrawAccount"
+                              className="account-select"
+                              value={withdrawAccountId}
+                              onChange={(event) => {
+                                setWithdrawAccountId(event.target.value)
+                                setWithdrawError('')
+                              }}
+                              disabled={isWithdrawing}
+                            >
+                              {withdrawAccounts.map((account) => (
+                                <option key={account.account_id} value={account.account_id}>
+                                  {account.bank_name} - {account.account_number}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+
+                        {withdrawError && (
+                          <p id="withdraw-error" className="deposit-error" role="alert">
+                            {withdrawError}
+                          </p>
+                        )}
+
+                        <div className="deposit-modal-actions">
+                          <button
+                            type="button"
+                            className="modal-cancel"
+                            onClick={closeWithdraw}
+                            disabled={isWithdrawing}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="modal-submit"
+                            disabled={isWithdrawing || isLoadingAccounts || withdrawAccounts.length === 0}
+                          >
+                            {isWithdrawing ? 'Processing...' : 'Withdraw'}
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+                  </div>
+                )}
     </main>
   )
 }
