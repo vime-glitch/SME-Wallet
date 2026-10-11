@@ -460,6 +460,13 @@
   box-shadow: 0 1.5rem 3rem rgb(45 27 46 / 25%);
 }
 
+.withdraw-modal {
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .deposit-modal-header {
   display: flex;
   align-items: flex-start;
@@ -610,6 +617,14 @@
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
+}
+
+.withdraw-modal-actions {
+  position: sticky;
+  z-index: 1;
+  bottom: 0;
+  padding-block: 0.5rem;
+  background: #fffdfb;
 }
 
 .modal-cancel,

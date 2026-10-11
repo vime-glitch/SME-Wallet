@@ -30,6 +30,13 @@ function Dashboard() {
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false)
   const [withdrawError, setWithdrawError] = useState('')
   const [withdrawSuccess, setWithdrawSuccess] = useState('')
+  const [withdrawOtpStage, setWithdrawOtpStage] = useState('idle')
+  const [withdrawOtpCode, setWithdrawOtpCode] = useState('')
+  const [withdrawOtpNotice, setWithdrawOtpNotice] = useState('')
+  const [withdrawOtpError, setWithdrawOtpError] = useState('')
+  const [withdrawAuthToken, setWithdrawAuthToken] = useState('')
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false)
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [isTransferOpen, setIsTransferOpen] = useState(false)
   const [transferRecipient, setTransferRecipient] = useState('')
@@ -318,6 +325,11 @@ function Dashboard() {
     setWithdrawAccounts([])
     setWithdrawError('')
     setWithdrawSuccess('')
+    setWithdrawOtpStage('idle')
+    setWithdrawOtpCode('')
+    setWithdrawOtpNotice('')
+    setWithdrawOtpError('')
+    setWithdrawAuthToken('')
     setIsWithdrawOpen(true)
     if (!token) {
       setWithdrawError('Your session has expired. Please log in again.')
@@ -325,7 +337,7 @@ function Dashboard() {
   }
 
   const closeWithdraw = () => {
-    if (isWithdrawing) {
+    if (isWithdrawing || isRequestingOtp || isVerifyingOtp) {
       return
     }
 
@@ -333,10 +345,173 @@ function Dashboard() {
     setWithdrawAmount('')
     setWithdrawAccountId('')
     setWithdrawError('')
+    setWithdrawOtpStage('idle')
+    setWithdrawOtpCode('')
+    setWithdrawOtpNotice('')
+    setWithdrawOtpError('')
+    setWithdrawAuthToken('')
+  }
+
+  const requestWithdrawalOtp = async () => {
+    const trimmedAmount = withdrawAmount.trim()
+    const numericAmount = Number(trimmedAmount)
+
+    if (!trimmedAmount) {
+      setWithdrawError('Amount is required.')
+      return
+    }
+
+    if (!/^\d+(\.\d+)?$/.test(trimmedAmount) || !Number.isFinite(numericAmount)) {
+      setWithdrawError('Enter a valid numeric amount.')
+      return
+    }
+
+    if (numericAmount <= 0) {
+      setWithdrawError('Enter an amount greater than zero.')
+      return
+    }
+
+    if (!Number.isFinite(balance) || numericAmount > balance) {
+      setWithdrawError('The withdrawal amount cannot exceed your wallet balance.')
+      return
+    }
+
+    if (!withdrawAccountId || withdrawAccounts.length === 0) {
+      setWithdrawError('Please select a registered bank account.')
+      return
+    }
+
+    if (!token) {
+      setWithdrawError('Your session has expired. Please log in again.')
+      return
+    }
+
+    setIsRequestingOtp(true)
+    setWithdrawError('')
+    setWithdrawOtpError('')
+    setWithdrawOtpNotice('')
+    setWithdrawAuthToken('')
+
+    try {
+      const response = await fetch('http://localhost:5000/api/wallet/withdraw/otp/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: Number(trimmedAmount),
+          account_id: Number(withdrawAccountId),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to request withdrawal OTP.')
+      }
+
+      setWithdrawOtpStage('otp_pending')
+      setWithdrawOtpCode('')
+      setWithdrawOtpNotice(
+        data?.development_mode === true &&
+          data?.mode === 'development-only' &&
+          typeof data?.development_otp === 'string'
+          ? `Development OTP: ${data.development_otp}`
+          : data?.development_mode === true
+            ? 'Development OTP response did not include a usable code.'
+            : data?.message || 'OTP delivery is not configured in this environment.',
+      )
+    } catch (requestError) {
+      setWithdrawOtpStage('idle')
+      setWithdrawError(requestError?.message || 'Unable to request withdrawal OTP.')
+    } finally {
+      setIsRequestingOtp(false)
+    }
+  }
+
+  const verifyWithdrawalOtp = async () => {
+    const trimmedAmount = withdrawAmount.trim()
+    const numericAmount = Number(trimmedAmount)
+    const otpValue = withdrawOtpCode.trim()
+
+    if (!trimmedAmount) {
+      setWithdrawOtpError('Amount is required.')
+      return
+    }
+
+    if (!/^\d+(\.\d+)?$/.test(trimmedAmount) || !Number.isFinite(numericAmount)) {
+      setWithdrawOtpError('Enter a valid numeric amount.')
+      return
+    }
+
+    if (!/^[0-9]{6}$/.test(otpValue)) {
+      setWithdrawOtpError('Enter the 6-digit OTP.')
+      return
+    }
+
+    if (!withdrawAccountId || withdrawAccounts.length === 0) {
+      setWithdrawOtpError('Please select a registered bank account.')
+      return
+    }
+
+    if (!token) {
+      setWithdrawOtpError('Your session has expired. Please log in again.')
+      return
+    }
+
+    setIsVerifyingOtp(true)
+    setWithdrawOtpError('')
+    setWithdrawOtpNotice('')
+
+    try {
+      const response = await fetch('http://localhost:5000/api/wallet/withdraw/otp/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          otp: otpValue,
+          amount: Number(trimmedAmount),
+          account_id: Number(withdrawAccountId),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setWithdrawOtpCode('')
+        setWithdrawAuthToken('')
+        setWithdrawOtpStage('otp_pending')
+        throw new Error(data?.message || 'Unable to verify OTP.')
+      }
+
+      if (typeof data?.withdrawal_authorization_token !== 'string' || !data.withdrawal_authorization_token) {
+        setWithdrawOtpCode('')
+        setWithdrawAuthToken('')
+        setWithdrawOtpStage('idle')
+        throw new Error('OTP verification did not return an authorization.')
+      }
+
+      setWithdrawAuthToken(data.withdrawal_authorization_token)
+      setWithdrawOtpStage('verified')
+      setWithdrawOtpNotice('OTP verified. Complete the withdrawal below.')
+      setWithdrawOtpError('')
+    } catch (verifyError) {
+      setWithdrawAuthToken('')
+      setWithdrawOtpError(verifyError?.message || 'Unable to verify the OTP.')
+    } finally {
+      setIsVerifyingOtp(false)
+    }
   }
 
   const handleWithdrawSubmit = async (event) => {
     event.preventDefault()
+
+    if (withdrawOtpStage !== 'verified' || !withdrawAuthToken) {
+      return
+    }
 
     const trimmedAmount = withdrawAmount.trim()
     const numericAmount = Number(trimmedAmount)
@@ -383,13 +558,26 @@ function Dashboard() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          amount: Number(withdrawAmount),
+          amount: Number(trimmedAmount),
           account_id: Number(withdrawAccountId),
+          withdrawal_authorization_token: withdrawAuthToken,
         }),
       })
       const data = await response.json()
 
       if (!response.ok) {
+        if (
+          response.status === 401 ||
+          response.status === 403 ||
+          response.status === 409 ||
+          (response.status === 400 && data?.message !== 'Insufficient wallet balance.')
+        ) {
+          setWithdrawOtpStage('idle')
+          setWithdrawOtpCode('')
+          setWithdrawOtpNotice('')
+          setWithdrawOtpError('')
+          setWithdrawAuthToken('')
+        }
         setWithdrawError(data?.message || 'Unable to process withdrawal. Please try again.')
         return
       }
@@ -405,6 +593,11 @@ function Dashboard() {
       setWithdrawAccountId('')
       setWithdrawError('')
       setWithdrawAccounts([])
+      setWithdrawOtpStage('idle')
+      setWithdrawOtpCode('')
+      setWithdrawOtpNotice('')
+      setWithdrawOtpError('')
+      setWithdrawAuthToken('')
 
       const walletResponse = await fetch('http://localhost:5000/api/wallet', {
         method: 'GET',
@@ -418,6 +611,11 @@ function Dashboard() {
         setBalance(Number(walletData.wallet.balance))
       }
     } catch {
+      setWithdrawOtpStage('idle')
+      setWithdrawOtpCode('')
+      setWithdrawOtpNotice('')
+      setWithdrawOtpError('')
+      setWithdrawAuthToken('')
       setWithdrawError('Unable to connect to the server. Please try again.')
     } finally {
       setIsWithdrawing(false)
@@ -845,7 +1043,7 @@ function Dashboard() {
                       {isWithdrawOpen && (
                   <div className="modal-backdrop" role="presentation">
                     <section
-                      className="deposit-modal"
+                      className="deposit-modal withdraw-modal"
                       role="dialog"
                       aria-modal="true"
                       aria-labelledby="withdraw-heading"
@@ -859,7 +1057,7 @@ function Dashboard() {
                           type="button"
                           className="modal-close"
                           onClick={closeWithdraw}
-                          disabled={isWithdrawing}
+                          disabled={isWithdrawing || isRequestingOtp || isVerifyingOtp}
                           aria-label="Close withdrawal dialog"
                         >
                           ×
@@ -885,10 +1083,15 @@ function Dashboard() {
                               onChange={(event) => {
                                 setWithdrawAmount(event.target.value)
                                 setWithdrawError('')
+                                setWithdrawOtpStage('idle')
+                                setWithdrawOtpCode('')
+                                setWithdrawOtpNotice('')
+                                setWithdrawOtpError('')
+                                setWithdrawAuthToken('')
                               }}
-                              aria-invalid={Boolean(withdrawError)}
-                              aria-describedby={withdrawError ? 'withdraw-error' : undefined}
-                              disabled={isWithdrawing}
+                              aria-invalid={Boolean(withdrawError || withdrawOtpError)}
+                              aria-describedby={withdrawError || withdrawOtpError ? 'withdraw-error' : undefined}
+                              disabled={isWithdrawing || isRequestingOtp || isVerifyingOtp}
                               autoFocus
                             />
                           </div>
@@ -912,8 +1115,13 @@ function Dashboard() {
                               onChange={(event) => {
                                 setWithdrawAccountId(event.target.value)
                                 setWithdrawError('')
+                                setWithdrawOtpStage('idle')
+                                setWithdrawOtpCode('')
+                                setWithdrawOtpNotice('')
+                                setWithdrawOtpError('')
+                                setWithdrawAuthToken('')
                               }}
-                              disabled={isWithdrawing}
+                              disabled={isWithdrawing || isRequestingOtp || isVerifyingOtp}
                             >
                               {withdrawAccounts.map((account) => (
                                 <option key={account.account_id} value={account.account_id}>
@@ -930,22 +1138,82 @@ function Dashboard() {
                           </p>
                         )}
 
-                        <div className="deposit-modal-actions">
+                        {withdrawOtpNotice && (
+                          <p className="deposit-instruction" role="status">
+                            {withdrawOtpNotice}
+                          </p>
+                        )}
+
+                        {withdrawOtpStage === 'otp_pending' && (
+                          <div className="deposit-field">
+                            <label htmlFor="withdraw-otp">OTP code</label>
+                            <input
+                              id="withdraw-otp"
+                              name="withdrawOtp"
+                              className="modal-input"
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={6}
+                              placeholder="Enter 6-digit OTP"
+                              value={withdrawOtpCode}
+                              onChange={(event) => {
+                                setWithdrawOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))
+                                setWithdrawOtpError('')
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  if (!isVerifyingOtp) {
+                                    verifyWithdrawalOtp()
+                                  }
+                                }
+                              }}
+                              disabled={isVerifyingOtp}
+                            />
+                          </div>
+                        )}
+
+                        {withdrawOtpError && (
+                          <p id="withdraw-error" className="deposit-error" role="alert">
+                            {withdrawOtpError}
+                          </p>
+                        )}
+
+                        <div className="deposit-modal-actions withdraw-modal-actions">
                           <button
                             type="button"
                             className="modal-cancel"
                             onClick={closeWithdraw}
-                            disabled={isWithdrawing}
+                            disabled={isWithdrawing || isRequestingOtp || isVerifyingOtp}
                           >
                             Cancel
                           </button>
-                          <button
-                            type="submit"
-                            className="modal-submit"
-                            disabled={isWithdrawing || isLoadingAccounts || withdrawAccounts.length === 0}
-                          >
-                            {isWithdrawing ? 'Processing...' : 'Withdraw'}
-                          </button>
+                          {withdrawOtpStage === 'verified' ? (
+                            <button
+                              type="submit"
+                              className="modal-submit"
+                              disabled={isWithdrawing || isRequestingOtp || isVerifyingOtp || !withdrawAuthToken}
+                            >
+                              {isWithdrawing ? 'Processing...' : 'Complete Withdrawal'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="modal-submit"
+                              onClick={
+                                withdrawOtpStage === 'otp_pending' ? verifyWithdrawalOtp : requestWithdrawalOtp
+                              }
+                              disabled={isRequestingOtp || isVerifyingOtp || isWithdrawing || isLoadingAccounts || withdrawAccounts.length === 0}
+                            >
+                              {isRequestingOtp
+                                ? 'Sending OTP...'
+                                : isVerifyingOtp
+                                  ? 'Verifying...'
+                                  : withdrawOtpStage === 'otp_pending'
+                                    ? 'Verify OTP'
+                                    : 'Request OTP'}
+                            </button>
+                          )}
                         </div>
                       </form>
                     </section>
